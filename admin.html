@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Wealth Ledger — Admin</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script src="assets/auth.js"></script>
+</head>
+<body>
+
+<div id="authGate" class="auth-gate">
+  <div class="auth-card">
+    <div class="eyebrow">Wealth Ledger</div>
+    <h1>Sign in</h1>
+    <form id="loginForm">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" autocomplete="username" required>
+      <label for="loginPassword">Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" required>
+      <div class="auth-error" id="loginError"></div>
+      <button type="submit">Sign in</button>
+    </form>
+    <div class="auth-note">This page is private. Sign in with the account created for it in Firebase Authentication.</div>
+  </div>
+</div>
+
+<div id="appRoot" style="display:none;">
+<div class="wrap">
+  <div class="topnav">
+    <span class="eyebrow" style="margin:0;">Wealth Ledger</span>
+    <div class="navlinks">
+      <a href="index.html">← Dashboard</a>
+      <button id="logoutBtn">Sign out</button>
+    </div>
+  </div>
+
+  <div class="masthead">
+    <h1>Content editor</h1>
+    <p>This is how the site gets updated each month. Bring your new statements to Claude as usual — Claude will hand you back an updated JSON block for whichever section changed (Dashboard, Holdings, or History). Paste it over the current content below and click Save. Nothing here is guessed — always load the current content first so you don't overwrite anything by accident.</p>
+  </div>
+
+  <div class="admin-block">
+    <h2>Dashboard content <span style="font-weight:400;color:var(--muted);font-size:13px;">(content/dashboard)</span></h2>
+    <textarea id="dashboardText" spellcheck="false"></textarea>
+    <div class="admin-actions">
+      <button data-doc="dashboard" data-action="load">Reload from Firestore</button>
+      <button data-doc="dashboard" data-action="save">Save</button>
+      <span class="admin-status" id="dashboardStatus"></span>
+    </div>
+  </div>
+
+  <div class="admin-block">
+    <h2>Holdings content <span style="font-weight:400;color:var(--muted);font-size:13px;">(content/holdings)</span></h2>
+    <textarea id="holdingsText" spellcheck="false"></textarea>
+    <div class="admin-actions">
+      <button data-doc="holdings" data-action="load">Reload from Firestore</button>
+      <button data-doc="holdings" data-action="save">Save</button>
+      <span class="admin-status" id="holdingsStatus"></span>
+    </div>
+  </div>
+
+  <div class="admin-block">
+    <h2>History content <span style="font-weight:400;color:var(--muted);font-size:13px;">(content/history)</span></h2>
+    <textarea id="historyText" spellcheck="false"></textarea>
+    <div class="admin-actions">
+      <button data-doc="history" data-action="load">Reload from Firestore</button>
+      <button data-doc="history" data-action="save">Save</button>
+      <span class="admin-status" id="historyStatus"></span>
+    </div>
+  </div>
+
+  <div class="admin-block">
+    <h2>July 2026 snapshot <span style="font-weight:400;color:var(--muted);font-size:13px;">(content/snapshot-2026-07)</span></h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-4px;">Frozen — you shouldn't normally need to touch this after it's first seeded.</p>
+    <textarea id="snapshotText" spellcheck="false"></textarea>
+    <div class="admin-actions">
+      <button data-doc="snapshot-2026-07" data-action="load">Reload from Firestore</button>
+      <button data-doc="snapshot-2026-07" data-action="save">Save</button>
+      <span class="admin-status" id="snapshot-2026-07Status"></span>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+(function(){
+  var db;
+  var docIds = ["dashboard", "holdings", "history", "snapshot-2026-07"];
+
+  function load(docId){
+    var ta = document.getElementById(docId === "snapshot-2026-07" ? "snapshotText" : docId + "Text");
+    var status = document.getElementById(docId + "Status");
+    status.textContent = "Loading…";
+    db.doc("content/" + docId).get().then(function(snap){
+      if (!snap.exists){
+        status.textContent = "Nothing saved yet for this doc.";
+        return;
+      }
+      ta.value = JSON.stringify(snap.data(), null, 2);
+      status.textContent = "Loaded";
+    }).catch(function(e){
+      status.textContent = "Couldn't load: " + e.message;
+    });
+  }
+
+  function save(docId){
+    var ta = document.getElementById(docId === "snapshot-2026-07" ? "snapshotText" : docId + "Text");
+    var status = document.getElementById(docId + "Status");
+    var parsed;
+    try {
+      parsed = JSON.parse(ta.value);
+    } catch (e){
+      status.textContent = "Invalid JSON — not saved (" + e.message + ")";
+      return;
+    }
+    status.textContent = "Saving…";
+    db.doc("content/" + docId).set(parsed).then(function(){
+      status.textContent = "Saved";
+    }).catch(function(e){
+      status.textContent = "Couldn't save: " + e.message;
+    });
+  }
+
+  document.querySelectorAll(".admin-actions button").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var docId = btn.dataset.doc;
+      if (btn.dataset.action === "load") load(docId); else save(docId);
+    });
+  });
+
+  window.WealthAuth.init(function(ctx){
+    db = ctx.db;
+    docIds.forEach(load);
+  });
+})();
+</script>
+</body>
+</html>

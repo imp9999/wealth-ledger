@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Wealth Ledger — Holdings</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script src="assets/auth.js"></script>
+</head>
+<body>
+
+<div id="authGate" class="auth-gate">
+  <div class="auth-card">
+    <div class="eyebrow">Wealth Ledger</div>
+    <h1>Sign in</h1>
+    <form id="loginForm">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" autocomplete="username" required>
+      <label for="loginPassword">Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" required>
+      <div class="auth-error" id="loginError"></div>
+      <button type="submit">Sign in</button>
+    </form>
+    <div class="auth-note">This page is private. Sign in with the account created for it in Firebase Authentication.</div>
+  </div>
+</div>
+
+<div id="appRoot" style="display:none;">
+<div class="wrap">
+  <div class="topnav">
+    <span class="eyebrow" style="margin:0;">Wealth Ledger</span>
+    <div class="navlinks">
+      <a href="index.html">← Dashboard</a>
+      <a href="history.html">History</a>
+      <button id="logoutBtn">Sign out</button>
+    </div>
+  </div>
+
+  <div class="masthead">
+    <div class="eyebrow">Investment Portfolio</div>
+    <h1>Holdings</h1>
+    <p id="asOfNote">Loading…</p>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="ALL">All securities</button>
+    <button class="tab-btn" data-tab="RRSP">RRSP</button>
+    <button class="tab-btn" data-tab="TFSA">TFSA</button>
+    <button class="tab-btn" data-tab="OTHER">Other accounts</button>
+  </div>
+
+  <div class="summary-row" id="summaryRow"></div>
+  <div id="tabContent"></div>
+
+  <footer>Source: statements you've provided Claude. Quantities, prices and book costs are as stated; % columns and gain figures are calculated. Not financial advice.</footer>
+</div>
+</div>
+
+<script>
+(function(){
+  var U = window.WealthUtil;
+  var fmtMoney = U.fmtMoney, escapeHtml = U.escapeHtml;
+  function fmtPct(n){ return (n>0?"+":"") + n.toFixed(2) + "%"; }
+  function fmtQty(n){ return n === null || n === undefined ? "—" : n.toLocaleString("en-US",{maximumFractionDigits:4}); }
+  function fmtPrice(n){ return n === null || n === undefined ? "—" : "$" + n.toFixed(2); }
+
+  var HOLDINGS = [];
+  var ACCOUNT_TOTALS = {};
+  var CALLOUTS = {};
+
+  function renderSummary(rows, label){
+    var mv = rows.reduce(function(s,r){return s+r.mv;},0);
+    var bc = rows.reduce(function(s,r){return s+r.bc;},0);
+    var gain = mv - bc;
+    var gainPct = bc ? (gain/bc*100) : 0;
+    document.getElementById("summaryRow").innerHTML =
+      '<div class="sum-tile"><div class="label">' + label + ' value</div><div class="value num">' + fmtMoney(mv) + '</div></div>' +
+      '<div class="sum-tile"><div class="label">Book cost</div><div class="value num">' + fmtMoney(bc) + '</div></div>' +
+      '<div class="sum-tile"><div class="label">Unrealized gain</div><div class="value num ' + (gain>=0?'good':'') + '">' + (gain>=0?'+':'') + fmtMoney(gain) + '</div></div>' +
+      '<div class="sum-tile"><div class="label">Return</div><div class="value num ' + (gainPct>=0?'good':'') + '">' + fmtPct(gainPct) + '</div></div>';
+  }
+
+  function renderTable(rows, showAccountCol){
+    if (!rows.length) return '<div class="empty-state">No holdings in this account yet.</div>';
+    var head = '<tr><th>Security</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Market value</th>' +
+      '<th class="num">% of account</th><th class="num">% of total</th><th class="num">Book cost</th><th class="num">Unrealized G/L</th></tr>';
+    var body = rows.map(function(r){
+      var flag = r.pctAcct > 15 ? ' flag-cell' : '';
+      var gainCls = r.gain > 0 ? 'gain-pos' : (r.gain < 0 ? 'gain-neg' : '');
+      var acctBadge = showAccountCol ? ' <span class="acct-badge ' + r.account + '">' + r.account + '</span>' : '';
+      return '<tr>' +
+        '<td><span class="sym">' + escapeHtml(r.sym) + '</span>' + acctBadge + '<span class="name">' + escapeHtml(r.name) + ' · <span class="cls-tag">' + escapeHtml(r.cls) + '</span></span></td>' +
+        '<td class="num">' + fmtQty(r.qty) + '</td>' +
+        '<td class="num">' + fmtPrice(r.price) + '</td>' +
+        '<td class="num">' + fmtMoney(r.mv) + '</td>' +
+        '<td class="num' + flag + '">' + r.pctAcct.toFixed(2) + '%</td>' +
+        '<td class="num">' + r.pctTotal.toFixed(2) + '%</td>' +
+        '<td class="num">' + fmtMoney(r.bc) + '</td>' +
+        '<td class="num ' + gainCls + '">' + (r.gain>=0?'+':'') + fmtMoney(r.gain) + ' (' + fmtPct(r.gainPct) + ')</td>' +
+        '</tr>';
+    }).join("");
+    return '<div class="table-scroll"><table><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
+  }
+
+  function render(tab){
+    var content = document.getElementById("tabContent");
+    if (tab === "OTHER"){
+      document.getElementById("summaryRow").innerHTML = '';
+      content.innerHTML = '<div class="empty-state">No other investment accounts on file yet. Bring a statement (LIRA, non-registered, employer plan, etc.) to Claude and this tab will populate after the next content update.</div>';
+      return;
+    }
+    var rows, label, showAcct;
+    if (tab === "ALL"){
+      rows = HOLDINGS.slice().sort(function(a,b){ return b.mv - a.mv; });
+      label = "Total portfolio"; showAcct = true;
+    } else {
+      rows = HOLDINGS.filter(function(r){ return r.account === tab; }).sort(function(a,b){ return b.mv - a.mv; });
+      label = tab; showAcct = false;
+    }
+    renderSummary(rows, label);
+    var html = renderTable(rows, showAcct);
+    if (tab === "RRSP" && CALLOUTS.rrsp) html += CALLOUTS.rrsp;
+    if ((tab === "TFSA" || tab === "ALL") && CALLOUTS.tfsa) html += CALLOUTS.tfsa;
+    content.innerHTML = html;
+  }
+
+  document.getElementById("tabs").addEventListener("click", function(e){
+    var btn = e.target.closest(".tab-btn");
+    if (!btn) return;
+    document.querySelectorAll(".tab-btn").forEach(function(b){ b.classList.remove("active"); });
+    btn.classList.add("active");
+    render(btn.dataset.tab);
+  });
+
+  window.WealthAuth.init(function(ctx){
+    ctx.db.doc("content/holdings").get().then(function(snap){
+      if (!snap.exists){
+        document.getElementById("asOfNote").textContent = "No holdings data found yet — run seed-local.html once to load your data.";
+        return;
+      }
+      var d = snap.data();
+      HOLDINGS = d.holdings || [];
+      ACCOUNT_TOTALS = d.accountTotals || {};
+      CALLOUTS = d.callouts || {};
+      document.getElementById("asOfNote").textContent = d.asOfNote || "Every security across every account.";
+      render("ALL");
+    }).catch(function(){
+      document.getElementById("asOfNote").textContent = "Couldn't load holdings content.";
+    });
+  });
+})();
+</script>
+</body>
+</html>

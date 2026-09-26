@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Wealth Ledger — History</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script src="assets/auth.js"></script>
+</head>
+<body>
+
+<div id="authGate" class="auth-gate">
+  <div class="auth-card">
+    <div class="eyebrow">Wealth Ledger</div>
+    <h1>Sign in</h1>
+    <form id="loginForm">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" autocomplete="username" required>
+      <label for="loginPassword">Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" required>
+      <div class="auth-error" id="loginError"></div>
+      <button type="submit">Sign in</button>
+    </form>
+    <div class="auth-note">This page is private. Sign in with the account created for it in Firebase Authentication.</div>
+  </div>
+</div>
+
+<div id="appRoot" style="display:none;">
+<div class="wrap" style="max-width:920px;">
+  <div class="topnav">
+    <span class="eyebrow" style="margin:0;">Wealth Ledger</span>
+    <div class="navlinks">
+      <a href="holdings.html">Portfolio holdings</a>
+      <a href="index.html">← Back to current dashboard</a>
+      <button id="logoutBtn">Sign out</button>
+    </div>
+  </div>
+
+  <div class="masthead">
+    <h1>Month-on-month history</h1>
+    <p>Every Monthly Update gets logged here. The current month stays live on the main dashboard; once a month closes, its dashboard is frozen exactly as it stood and linked below, so you can always look back at what a given month's numbers were.</p>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Month</th>
+        <th class="num">Investable assets</th>
+        <th class="num">Mortgage balance</th>
+        <th class="num">Home value</th>
+        <th class="num">Net worth</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="historyRows"><tr><td colspan="6" style="color:var(--muted);">Loading…</td></tr></tbody>
+  </table>
+
+  <div id="historyCallout"></div>
+
+  <footer>Updated whenever a Monthly Update is run. Home value and mortgage balance can be set for any month from the "Home equity" section on the current dashboard.</footer>
+</div>
+</div>
+
+<script>
+(function(){
+  var U = window.WealthUtil;
+  var esc = U.escapeHtml;
+
+  window.WealthAuth.init(function(ctx){
+    ctx.db.doc("content/history").get().then(function(snap){
+      var body = document.getElementById("historyRows");
+      if (!snap.exists){
+        body.innerHTML = '<tr><td colspan="6" style="color:var(--muted);">No history data found yet — run seed-local.html once to load your data.</td></tr>';
+        return;
+      }
+      var d = snap.data();
+      var rows = d.rows || [];
+      body.innerHTML = rows.map(function(r){
+        var badge = r.badge === "live" ? '<span class="badge live">Current</span>' : '<span class="badge frozen">Frozen</span>';
+        return "<tr><td class=\"month-cell\">" + esc(r.month) + " " + badge + "</td>" +
+          '<td class="num">' + esc(r.investable) + '</td>' +
+          '<td class="num' + (r.mortgageMissing ? ' dash' : '') + '">' + esc(r.mortgage) + '</td>' +
+          '<td class="num' + (r.homeMissing ? ' dash' : '') + '">' + esc(r.home) + '</td>' +
+          '<td class="num">' + esc(r.netWorth) + '</td>' +
+          '<td><a class="openlink" href="' + esc(r.link) + '">Open →</a></td></tr>';
+      }).join("");
+      if (d.calloutHtml){
+        document.getElementById("historyCallout").innerHTML =
+          '<div class="callout info"><span class="icon">ⓘ</span><span>' + d.calloutHtml + '</span></div>';
+      }
+    }).catch(function(){
+      document.getElementById("historyRows").innerHTML = '<tr><td colspan="6" style="color:var(--muted);">Couldn\'t load history content.</td></tr>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

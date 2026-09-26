@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Wealth Ledger</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script src="assets/auth.js"></script>
+</head>
+<body>
+
+<div id="authGate" class="auth-gate">
+  <div class="auth-card">
+    <div class="eyebrow">Wealth Ledger</div>
+    <h1>Sign in</h1>
+    <form id="loginForm">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" autocomplete="username" required>
+      <label for="loginPassword">Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" required>
+      <div class="auth-error" id="loginError"></div>
+      <button type="submit">Sign in</button>
+    </form>
+    <div class="auth-note">This dashboard is private. Sign in with the account created for it in Firebase Authentication.</div>
+  </div>
+</div>
+
+<div id="appRoot" style="display:none;">
+<div class="wrap">
+
+  <div class="topnav" style="justify-content:flex-end;">
+    <div class="navlinks">
+      <a href="#home-equity">Home equity ↓</a>
+      <a href="holdings.html">Portfolio holdings →</a>
+      <a href="history.html">Month-on-month history →</a>
+      <button id="logoutBtn">Sign out</button>
+    </div>
+  </div>
+
+  <div class="masthead">
+    <div>
+      <div class="eyebrow">Monthly Wealth Review</div>
+      <h1>Wealth Ledger</h1>
+      <div class="meta" id="mastMeta">Loading…</div>
+    </div>
+    <div class="hero-row">
+      <div class="hero-figure">
+        <div class="label" id="heroLabel">Net worth</div>
+        <div class="value num" id="heroValue">—</div>
+        <div class="sub" id="heroSub"></div>
+      </div>
+    </div>
+    <div class="chips" id="chipsRow"></div>
+  </div>
+
+  <div class="kpis" id="kpiRow"></div>
+
+  <section>
+    <div class="section-head">
+      <h2>Investment portfolio</h2>
+      <span class="tag"><a href="holdings.html">Full holdings list →</a></span>
+    </div>
+    <p style="font-size:13.5px;color:var(--ink-2);margin:-12px 0 18px;">Top 5 positions per account below — every security, with % of account and % of total portfolio, lives on the <a href="holdings.html" style="font-weight:600;">Holdings</a> page.</p>
+    <div class="accounts" id="accountsRow"></div>
+    <div id="portfolioCallouts"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Spending &amp; cash flow</h2>
+      <span class="tag">Module 1</span>
+    </div>
+    <p style="font-size:13.5px;color:var(--ink-2);margin:-6px 0 0;" id="spendingNote"></p>
+    <div class="barlist" id="spendingBars"></div>
+    <div id="spendingCallout"></div>
+    <h3 style="font-size:1.05rem;margin:28px 0 4px;">Top discretionary leaks</h3>
+    <div class="leaks" id="leaksRow"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Liabilities &amp; debt</h2>
+      <span class="tag">Module 2</span>
+    </div>
+    <div class="liab-grid" id="liabGrid"></div>
+    <div id="liabCallouts"></div>
+  </section>
+
+  <section id="home-equity">
+    <div class="section-head">
+      <h2>Home equity</h2>
+      <span class="tag">Manual entry</span>
+    </div>
+    <p style="font-size:13.5px;color:var(--ink-2);margin:-6px 0 18px;">Home value isn't in any statement — enter it by hand for whichever month you're marking. Mortgage balance is pre-filled from your latest mortgage statement, so most months you'll only need to type a home price and hit save; override it if you have a more current balance. The most recently updated month feeds the "Net worth" figure at the top of this page.</p>
+
+    <div class="docs-panel">
+      <div class="docs-toolbar">
+        <label for="heMonthSelect">Month</label>
+        <select id="heMonthSelect" class="month-select"></select>
+        <span class="docs-status" id="heStatus"></span>
+      </div>
+      <div class="he-grid">
+        <div class="he-field">
+          <label for="homeValueInput">Current home price</label>
+          <div class="he-input-wrap"><span>$</span><input type="number" id="homeValueInput" inputmode="decimal" placeholder="e.g. 650000"></div>
+        </div>
+        <div class="he-field">
+          <label for="mortgageBalanceInput">Current mortgage balance</label>
+          <div class="he-input-wrap"><span>$</span><input type="number" id="mortgageBalanceInput" inputmode="decimal" placeholder="e.g. 480000"></div>
+        </div>
+        <div class="he-field">
+          <label>Home equity</label>
+          <div class="he-computed num" id="heEquity">—</div>
+        </div>
+      </div>
+      <button type="button" class="add-btn" id="heSaveBtn" style="margin-top:14px;">Save for this month</button>
+    </div>
+
+    <div class="intake-table">
+      <h3 style="font-size:1.05rem;margin:0 0 10px;">Home equity by month</h3>
+      <table>
+        <thead><tr><th>Month</th><th class="num">Home price</th><th class="num">Mortgage balance</th><th class="num">Equity</th></tr></thead>
+        <tbody id="heHistoryBody"><tr><td colspan="4" style="color:var(--muted);">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Monthly documents</h2>
+      <span class="tag">Keep this current</span>
+    </div>
+    <p style="font-size:13.5px;color:var(--ink-2);margin:-6px 0 18px;">Pick the month you're providing documents for and log what's on the way. This is a running checklist on this page only — it doesn't send files anywhere. To actually get a statement processed into the dashboard, bring it to your conversation with Claude and mention the month; Claude will give you an updated content update to paste into the Admin page.</p>
+
+    <div class="docs-panel">
+      <div class="docs-toolbar">
+        <label for="monthSelect">Month</label>
+        <select id="monthSelect" class="month-select"></select>
+        <span class="docs-status" id="docsStatus">Loading…</span>
+      </div>
+      <div id="moduleList"></div>
+    </div>
+
+    <div class="intake-table">
+      <h3 style="font-size:1.05rem;margin:0 0 10px;">Intake history</h3>
+      <table>
+        <thead><tr><th>Month</th><th>RRSP</th><th>TFSA</th><th>Credit card</th><th>Mortgage</th><th>Bank</th><th>Other</th></tr></thead>
+        <tbody id="historyBody"><tr><td colspan="7" style="color:var(--muted);">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Strategic considerations</h2>
+      <span class="tag">Not financial advice</span>
+    </div>
+    <div class="advice" id="adviceList"></div>
+  </section>
+
+  <footer id="footerSources">Loading…</footer>
+
+</div>
+</div>
+
+<script>
+(function(){
+  var U = window.WealthUtil;
+  var fmt = U.fmtMoney, esc = U.escapeHtml;
+
+  var MODULES = [
+    {key:"rrsp", label:"RRSP statement"},
+    {key:"tfsa", label:"TFSA statement"},
+    {key:"mbna", label:"Credit card statement"},
+    {key:"mortgage", label:"Mortgage statement"},
+    {key:"bank", label:"Bank / chequing statement"},
+    {key:"other", label:"Other documents"}
+  ];
+
+  function monthKey(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); }
+  function monthLabel(d){ return d.toLocaleString("en-US",{month:"long", year:"numeric"}); }
+  function buildMonthOptions(){
+    var opts = [];
+    var now = new Date();
+    for (var i = -6; i <= 2; i++){
+      var d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      opts.push({key: monthKey(d), label: monthLabel(d)});
+    }
+    return opts;
+  }
+
+  function renderCallout(c){
+    var icon = c.type === "warn" ? "⚑" : "ⓘ";
+    return '<div class="callout ' + c.type + '"><span class="icon">' + icon + '</span><span>' + c.html + '</span></div>';
+  }
+
+  function renderDashboardContent(d){
+    document.getElementById("mastMeta").innerHTML =
+      "Prepared for <b>" + esc(d.meta.preparedFor) + "</b> · Investments as of <b>" + esc(d.meta.investmentsAsOf) +
+      "</b> · Card cycle <b>" + esc(d.meta.cardCycle) + "</b>";
+
+    document.getElementById("chipsRow").innerHTML = d.chips.map(function(c){
+      return '<span class="chip ' + c[0] + '"><span class="dot"></span>' + esc(c[1]) + "</span>";
+    }).join("");
+
+    document.getElementById("kpiRow").innerHTML = d.kpis.map(function(k){
+      var deltaCls = k.good ? "good" : (k.flag ? "flag" : "");
+      return '<div class="kpi"><div class="label">' + esc(k.label) + '</div><div class="value num">' + esc(k.value) +
+        '</div><div class="delta ' + deltaCls + '">' + esc(k.delta) + "</div></div>";
+    }).join("");
+
+    document.getElementById("accountsRow").innerHTML = d.accounts.map(function(a){
+      var stack = a.mix.map(function(m){ return '<span style="width:' + m.pct + '%; background:var(--' + m.color + ')"></span>'; }).join("");
+      var legend = a.mix.map(function(m){ return '<span class="lk"><span class="sw" style="background:var(--' + m.color + ')"></span>' + esc(m.label) + " " + m.pct + "%</span>"; }).join("");
+      var rows = a.top.map(function(h){
+        var cls = h.flag ? ' class="flagrow"' : "";
+        var pillOrPlain = h.flag ? esc(h.name) + '<span class="pill warn">' + h.pct + "%</span>" : esc(h.name);
+        return "<tr" + cls + "><td>" + pillOrPlain + '</td><td class="num">' + h.pct + '%</td><td class="num">' + fmt(h.value) + "</td></tr>";
+      }).join("");
+      return '<div class="panel"><div class="panel-head"><h3>' + esc(a.name) + '</h3><div class="acct-total num">' + fmt(a.total) + "</div></div>" +
+        '<div class="gain up">' + esc(a.gain) + "</div>" +
+        '<div class="stackbar">' + stack + '</div><div class="legend">' + legend + "</div>" +
+        '<table><thead><tr><th>Top holdings</th><th class="num">% of acct</th><th class="num">Value</th></tr></thead><tbody>' + rows + "</tbody></table></div>";
+    }).join("");
+
+    document.getElementById("portfolioCallouts").innerHTML = (d.portfolioCallouts || []).map(renderCallout).join("");
+
+    document.getElementById("spendingNote").textContent = d.spendingNote || "";
+    document.getElementById("spendingBars").innerHTML = d.spendingBars.map(function(b){
+      return '<div class="bar-row"><span class="cat">' + esc(b.cat) + '</span><div class="bar-track"><div class="bar-fill" style="width:' +
+        b.widthPct + "%;background:var(--" + b.color + ')"></div></div><span class="amt">' + fmt(b.amt) + ' <span class="pct">' + b.pct + "%</span></span></div>";
+    }).join("");
+    document.getElementById("spendingCallout").innerHTML = d.spendingCallout ? renderCallout({type:"info", html:d.spendingCallout}) : "";
+    document.getElementById("leaksRow").innerHTML = d.leaks.map(function(l){
+      return '<div class="leak-card"><div class="rank">' + esc(l.rank) + '</div><div class="amt num">' + fmt(l.amt) + '</div><div class="note">' + esc(l.note) + "</div></div>";
+    }).join("");
+
+    function kvRows(kv){ return kv.map(function(p){ return '<div class="kv"><span class="k">' + esc(p[0]) + '</span><span class="v">' + esc(p[1]) + "</span></div>"; }).join(""); }
+    var mbna = d.liabMbna, mort = d.liabMortgage;
+    document.getElementById("liabGrid").innerHTML =
+      '<div class="panel"><div class="panel-head"><h3>MBNA Mastercard</h3><div class="acct-total num">' + fmt(mbna.total) + "</div></div>" +
+      '<div class="util-track"><div class="util-fill" style="width:' + mbna.utilPct + '%; background:var(--warn)"></div></div>' +
+      '<div style="font-size:12.5px;color:var(--ink-2);margin-bottom:14px;">' + esc(mbna.utilNote) + "</div>" + kvRows(mbna.kv) + "</div>" +
+      '<div class="panel"><div class="panel-head"><h3>National Bank Mortgage</h3><div class="acct-total num">' + fmt(mort.total) + "</div></div>" +
+      '<div style="font-size:12.5px;color:var(--ink-2);margin-bottom:14px;">' + esc(mort.note) + "</div>" + kvRows(mort.kv) + "</div>";
+    document.getElementById("liabCallouts").innerHTML = (d.liabCallouts || []).map(renderCallout).join("");
+
+    document.getElementById("adviceList").innerHTML = d.advice.map(function(a, i){
+      return '<div class="advice-item"><div class="n">' + (i + 1) + "</div><div><h4>" + esc(a.title) + "</h4><p>" + esc(a.body) + "</p></div></div>";
+    }).join("");
+
+    document.getElementById("footerSources").textContent = d.footerSources || "";
+
+    window.WEALTH_BASE = d.base;
+    window.WEALTH_DEFAULT_HERO = { label: d.heroLabelDefault, value: d.heroValueDefault, sub: d.heroSubDefault };
+    if (!window.WEALTH_HERO_LOADED) {
+      document.getElementById("heroLabel").textContent = d.heroLabelDefault;
+      document.getElementById("heroValue").textContent = d.heroValueDefault;
+      document.getElementById("heroSub").textContent = d.heroSubDefault;
+    }
+  }
+
+  /* ===================== Interactive: db-backed sections ===================== */
+  var select, moduleList, docsStatus, historyBody, monthOpts, currentKey;
+  var heSelect, homeValueInput, mortgageBalanceInput, heEquityEl, heSaveBtn, heStatus, heHistoryBody;
+  var db;
+
+  function emptyModules(){
+    var m = {};
+    MODULES.forEach(function(mod){ m[mod.key] = {status:"missing", files:[]}; });
+    return m;
+  }
+
+  function renderModules(monthKeyVal, data){
+    var modules = (data && data.modules) || emptyModules();
+    moduleList.innerHTML = "";
+    MODULES.forEach(function(mod){
+      var mstate = modules[mod.key] || {status:"missing", files:[]};
+      var row = document.createElement("div");
+      row.className = "module-row";
+      var label = document.createElement("div");
+      label.className = "m-label"; label.textContent = mod.label;
+      var pill = document.createElement("span");
+      pill.className = "status-pill " + mstate.status; pill.textContent = mstate.status;
+      var files = document.createElement("div");
+      files.className = "file-list";
+      (mstate.files || []).forEach(function(f, idx){
+        var chip = document.createElement("span");
+        chip.className = "file-chip";
+        var sizeKb = f.size ? Math.round(f.size / 1024) + " KB" : "";
+        chip.innerHTML = "<span>" + esc(f.name) + (sizeKb ? " · " + sizeKb : "") + "</span>";
+        var rm = document.createElement("button");
+        rm.type = "button"; rm.textContent = "×"; rm.title = "Remove";
+        rm.addEventListener("click", function(){ removeFile(monthKeyVal, mod.key, idx); });
+        chip.appendChild(rm);
+        files.appendChild(chip);
+      });
+      var addWrap = document.createElement("div");
+      var addBtn = document.createElement("button");
+      addBtn.type = "button"; addBtn.className = "add-btn"; addBtn.textContent = "+ Add files";
+      var input = document.createElement("input");
+      input.type = "file"; input.multiple = true; input.style.display = "none";
+      input.addEventListener("change", function(){
+        if (input.files && input.files.length) addFiles(monthKeyVal, mod.key, input.files);
+        input.value = "";
+      });
+      addBtn.addEventListener("click", function(){ input.click(); });
+      addWrap.appendChild(addBtn); addWrap.appendChild(input);
+      row.appendChild(label); row.appendChild(pill); row.appendChild(files); row.appendChild(addWrap);
+      moduleList.appendChild(row);
+    });
+  }
+
+  var unsubDoc = null;
+  function watchMonth(key){
+    if (unsubDoc) { unsubDoc(); unsubDoc = null; }
+    var ref = db.doc("months/" + key);
+    unsubDoc = ref.onSnapshot(function(snap){
+      var data = snap.exists ? snap.data() : null;
+      renderModules(key, data);
+    }, function(){
+      renderModules(key, null);
+      docsStatus.textContent = "Sync unavailable — showing local view";
+    });
+  }
+
+  function addFiles(key, moduleKey, fileList){
+    var ref = db.doc("months/" + key);
+    ref.get().then(function(snap){
+      var data = snap.exists ? JSON.parse(JSON.stringify(snap.data())) : {modules: emptyModules(), monthKey: key, label: monthLabel(new Date(key + "-01"))};
+      if (!data.modules) data.modules = emptyModules();
+      if (!data.modules[moduleKey]) data.modules[moduleKey] = {status:"missing", files:[]};
+      var newFiles = Array.prototype.map.call(fileList, function(f){
+        return {name: f.name, size: f.size, type: f.type || "unknown", uploadedAt: new Date().toISOString()};
+      });
+      data.modules[moduleKey].files = (data.modules[moduleKey].files || []).concat(newFiles);
+      data.modules[moduleKey].status = "queued";
+      data.monthKey = key;
+      data.label = monthLabel(new Date(key + "-01"));
+      data.updatedAt = new Date().toISOString();
+      return ref.set(data);
+    }).then(function(){ refreshHistory(); })
+      .catch(function(){ docsStatus.textContent = "Couldn't save — try again"; });
+  }
+
+  function removeFile(key, moduleKey, idx){
+    var ref = db.doc("months/" + key);
+    ref.get().then(function(snap){
+      if (!snap.exists) return;
+      var data = JSON.parse(JSON.stringify(snap.data()));
+      if (!data.modules || !data.modules[moduleKey]) return;
+      data.modules[moduleKey].files.splice(idx, 1);
+      if (data.modules[moduleKey].files.length === 0) data.modules[moduleKey].status = "missing";
+      data.updatedAt = new Date().toISOString();
+      return ref.set(data);
+    }).then(function(){ refreshHistory(); });
+  }
+
+  function refreshHistory(){
+    db.collection("months").orderBy("monthKey", "desc").limit(12).get().then(function(qs){
+      if (qs.empty){
+        historyBody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);">No documents logged yet.</td></tr>';
+        return;
+      }
+      historyBody.innerHTML = "";
+      qs.docs.forEach(function(doc){
+        var data = doc.data();
+        var modules = data.modules || {};
+        var tds = ["<td>" + esc(data.label || doc.id) + "</td>"];
+        ["rrsp","tfsa","mbna","mortgage","bank","other"].forEach(function(k){
+          var st = (modules[k] && modules[k].status) || "missing";
+          tds.push('<td><span class="mdot ' + st + '" title="' + st + '"></span></td>');
+        });
+        var tr = document.createElement("tr");
+        tr.innerHTML = tds.join("");
+        historyBody.appendChild(tr);
+      });
+    }).catch(function(){
+      historyBody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);">History unavailable.</td></tr>';
+    });
+  }
+
+  function updateEquityPreview(){
+    var hv = parseFloat(homeValueInput.value);
+    var mb = parseFloat(mortgageBalanceInput.value);
+    if (!isNaN(hv) && !isNaN(mb)) heEquityEl.textContent = fmt(hv - mb);
+    else heEquityEl.textContent = "—";
+  }
+
+  function loadHomeEquityForMonth(key){
+    homeValueInput.value = ""; heEquityEl.textContent = "—";
+    mortgageBalanceInput.value = window.WEALTH_BASE ? window.WEALTH_BASE.mortgage : "";
+    db.doc("months/" + key).get().then(function(snap){
+      var data = snap.exists ? snap.data() : null;
+      if (data && data.homeValue != null) homeValueInput.value = data.homeValue;
+      mortgageBalanceInput.value = (data && data.mortgageBalance != null) ? data.mortgageBalance : (window.WEALTH_BASE ? window.WEALTH_BASE.mortgage : "");
+      updateEquityPreview();
+    });
+  }
+
+  function refreshHeHistory(){
+    db.collection("months").orderBy("monthKey", "desc").limit(12).get().then(function(qs){
+      var base = window.WEALTH_BASE || {};
+      var rows = qs.docs.filter(function(doc){ var d = doc.data(); return d && d.homeValue != null; });
+      if (!rows.length){
+        heHistoryBody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);">Nothing saved yet — add a home price above.</td></tr>';
+        return;
+      }
+      heHistoryBody.innerHTML = "";
+      rows.forEach(function(doc){
+        var d = doc.data();
+        var mb = d.mortgageBalance != null ? d.mortgageBalance : base.mortgage;
+        var equity = d.homeValue - mb;
+        var tr = document.createElement("tr");
+        tr.innerHTML = "<td>" + esc(d.label || doc.id) + '</td><td class="num">' + fmt(d.homeValue) +
+          '</td><td class="num">' + fmt(mb) + '</td><td class="num">' + fmt(equity) + "</td>";
+        heHistoryBody.appendChild(tr);
+      });
+    }).catch(function(){
+      heHistoryBody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);">History unavailable.</td></tr>';
+    });
+  }
+
+  function refreshHero(){
+    db.collection("months").orderBy("monthKey", "desc").limit(12).get().then(function(qs){
+      var found = null;
+      qs.docs.forEach(function(doc){
+        if (found) return;
+        var d = doc.data();
+        if (d && d.homeValue != null && d.mortgageBalance != null) found = d;
+      });
+      var heroLabel = document.getElementById("heroLabel");
+      var heroValue = document.getElementById("heroValue");
+      var heroSub = document.getElementById("heroSub");
+      window.WEALTH_HERO_LOADED = true;
+      var base = window.WEALTH_BASE;
+      if (!found || !base){
+        var def = window.WEALTH_DEFAULT_HERO || {};
+        heroLabel.textContent = def.label || "Net worth";
+        heroValue.textContent = def.value || "—";
+        heroSub.textContent = def.sub || "";
+        return;
+      }
+      var netWorth = base.investable + base.chequing - base.mbna - found.mortgageBalance + found.homeValue;
+      var equity = found.homeValue - found.mortgageBalance;
+      heroLabel.textContent = "Net worth (incl. home equity)";
+      heroValue.textContent = fmt(netWorth);
+      heroSub.textContent = "Includes " + fmt(equity) + " of home equity as of " + (found.label || found.monthKey) +
+        " (" + fmt(found.homeValue) + " home value − " + fmt(found.mortgageBalance) + " mortgage). Investment and card balances are still last statement's figures.";
+    }).catch(function(){});
+  }
+
+  function initInteractive(){
+    select = document.getElementById("monthSelect");
+    moduleList = document.getElementById("moduleList");
+    docsStatus = document.getElementById("docsStatus");
+    historyBody = document.getElementById("historyBody");
+    heSelect = document.getElementById("heMonthSelect");
+    homeValueInput = document.getElementById("homeValueInput");
+    mortgageBalanceInput = document.getElementById("mortgageBalanceInput");
+    heEquityEl = document.getElementById("heEquity");
+    heSaveBtn = document.getElementById("heSaveBtn");
+    heStatus = document.getElementById("heStatus");
+    heHistoryBody = document.getElementById("heHistoryBody");
+
+    monthOpts = buildMonthOptions();
+    currentKey = monthKey(new Date());
+    monthOpts.forEach(function(o){
+      var el = document.createElement("option"); el.value = o.key; el.textContent = o.label;
+      if (o.key === currentKey) el.selected = true;
+      select.appendChild(el);
+      var el2 = el.cloneNode(true);
+      heSelect.appendChild(el2);
+    });
+
+    docsStatus.textContent = "Synced";
+    watchMonth(select.value);
+    refreshHistory();
+    loadHomeEquityForMonth(heSelect.value);
+    refreshHero();
+    refreshHeHistory();
+
+    select.addEventListener("change", function(){ watchMonth(select.value); });
+    heSelect.addEventListener("change", function(){ loadHomeEquityForMonth(heSelect.value); });
+    homeValueInput.addEventListener("input", updateEquityPreview);
+    mortgageBalanceInput.addEventListener("input", updateEquityPreview);
+
+    heSaveBtn.addEventListener("click", function(){
+      var hv = parseFloat(homeValueInput.value);
+      var mb = parseFloat(mortgageBalanceInput.value);
+      if (isNaN(hv) || isNaN(mb)) { heStatus.textContent = "Enter both values"; return; }
+      var key = heSelect.value;
+      var ref = db.doc("months/" + key);
+      heStatus.textContent = "Saving…";
+      ref.get().then(function(snap){
+        var data = snap.exists ? JSON.parse(JSON.stringify(snap.data())) : {monthKey: key, label: monthLabel(new Date(key + "-01")), modules: emptyModules()};
+        data.homeValue = hv;
+        data.mortgageBalance = mb;
+        data.homeEquityUpdatedAt = new Date().toISOString();
+        data.monthKey = key;
+        if (!data.label) data.label = monthLabel(new Date(key + "-01"));
+        if (!data.modules) data.modules = emptyModules();
+        return ref.set(data);
+      }).then(function(){
+        heStatus.textContent = "Saved";
+        refreshHistory(); refreshHero(); refreshHeHistory();
+      }).catch(function(){ heStatus.textContent = "Couldn't save — try again"; });
+    });
+  }
+
+  window.WealthAuth.init(function(ctx){
+    db = ctx.db;
+    ctx.db.doc("content/dashboard").get().then(function(snap){
+      if (snap.exists) renderDashboardContent(snap.data());
+      else document.getElementById("footerSources").textContent = "No content found yet — run seed-local.html once to load your data.";
+    }).catch(function(){
+      document.getElementById("footerSources").textContent = "Couldn't load dashboard content.";
+    });
+    initInteractive();
+  });
+})();
+</script>
+</body>
+</html>

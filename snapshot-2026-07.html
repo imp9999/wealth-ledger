@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Wealth Ledger — July 2026</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script src="assets/auth.js"></script>
+</head>
+<body>
+
+<div id="authGate" class="auth-gate">
+  <div class="auth-card">
+    <div class="eyebrow">Wealth Ledger</div>
+    <h1>Sign in</h1>
+    <form id="loginForm">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" autocomplete="username" required>
+      <label for="loginPassword">Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" required>
+      <div class="auth-error" id="loginError"></div>
+      <button type="submit">Sign in</button>
+    </form>
+    <div class="auth-note">This page is private. Sign in with the account created for it in Firebase Authentication.</div>
+  </div>
+</div>
+
+<div id="appRoot" style="display:none;">
+<div class="wrap">
+
+  <div class="snapshot-banner" id="snapshotBanner">Loading…</div>
+
+  <div class="masthead">
+    <div>
+      <div class="eyebrow">Monthly Wealth Review</div>
+      <h1>Wealth Ledger</h1>
+      <div class="meta" id="mastMeta">Loading…</div>
+    </div>
+    <div class="hero-row">
+      <div class="hero-figure">
+        <div class="label" id="heroLabel">Net worth</div>
+        <div class="value num" id="heroValue">—</div>
+        <div class="sub" id="heroSub"></div>
+      </div>
+    </div>
+    <div class="chips" id="chipsRow"></div>
+  </div>
+
+  <div class="kpis" id="kpiRow"></div>
+
+  <section>
+    <div class="section-head"><h2>Investment portfolio</h2><span class="tag">Module 3</span></div>
+    <div class="accounts" id="accountsRow"></div>
+    <div id="portfolioCallouts"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Spending &amp; cash flow</h2><span class="tag">Module 1</span></div>
+    <p style="font-size:13.5px;color:var(--ink-2);margin:-6px 0 0;" id="spendingNote"></p>
+    <div class="barlist" id="spendingBars"></div>
+    <div id="spendingCallout"></div>
+    <h3 style="font-size:1.05rem;margin:28px 0 4px;">Top discretionary leaks</h3>
+    <div class="leaks" id="leaksRow"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Liabilities &amp; debt</h2><span class="tag">Module 2</span></div>
+    <div class="liab-grid" id="liabGrid"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Strategic considerations</h2><span class="tag">Not financial advice</span></div>
+    <div class="advice" id="adviceList"></div>
+  </section>
+
+  <footer id="footerSources">Loading…</footer>
+</div>
+</div>
+
+<script>
+(function(){
+  var U = window.WealthUtil;
+  var fmt = U.fmtMoney, esc = U.escapeHtml;
+
+  function renderCallout(c){
+    var icon = c.type === "warn" ? "⚑" : "ⓘ";
+    return '<div class="callout ' + c.type + '"><span class="icon">' + icon + '</span><span>' + c.html + '</span></div>';
+  }
+
+  window.WealthAuth.init(function(ctx){
+    ctx.db.doc("content/snapshot-2026-07").get().then(function(snap){
+      if (!snap.exists){
+        document.getElementById("footerSources").textContent = "No snapshot content found yet — run seed-local.html once to load your data.";
+        return;
+      }
+      var d = snap.data();
+
+      document.getElementById("snapshotBanner").innerHTML = d.banner;
+      document.getElementById("mastMeta").innerHTML =
+        "Prepared for <b>" + esc(d.meta.preparedFor) + "</b> · Investments as of <b>" + esc(d.meta.investmentsAsOf) +
+        "</b> · Card cycle <b>" + esc(d.meta.cardCycle) + "</b>";
+      document.getElementById("heroLabel").textContent = d.hero.label;
+      document.getElementById("heroValue").textContent = d.hero.value;
+      document.getElementById("heroSub").textContent = d.hero.sub;
+
+      document.getElementById("chipsRow").innerHTML = d.chips.map(function(c){
+        return '<span class="chip ' + c[0] + '"><span class="dot"></span>' + esc(c[1]) + "</span>";
+      }).join("");
+
+      document.getElementById("kpiRow").innerHTML = d.kpis.map(function(k){
+        var deltaCls = k.good ? "good" : (k.flag ? "flag" : "");
+        return '<div class="kpi"><div class="label">' + esc(k.label) + '</div><div class="value num">' + esc(k.value) +
+          '</div><div class="delta ' + deltaCls + '">' + esc(k.delta) + "</div></div>";
+      }).join("");
+
+      document.getElementById("accountsRow").innerHTML = d.accounts.map(function(a){
+        var stack = a.mix.map(function(m){ return '<span style="width:' + m.pct + '%; background:var(--' + m.color + ')"></span>'; }).join("");
+        var legend = a.mix.map(function(m){ return '<span class="lk"><span class="sw" style="background:var(--' + m.color + ')"></span>' + esc(m.label) + " " + m.pct + "%</span>"; }).join("");
+        var rows = a.top.map(function(h){
+          var cls = h.flag ? ' class="flagrow"' : "";
+          var pillOrPlain = h.flag ? esc(h.name) + '<span class="pill warn">' + h.pct + "%</span>" : esc(h.name);
+          return "<tr" + cls + "><td>" + pillOrPlain + '</td><td class="num">' + h.pct + '%</td><td class="num">' + fmt(h.value) + "</td></tr>";
+        }).join("");
+        return '<div class="panel"><div class="panel-head"><h3>' + esc(a.name) + '</h3><div class="acct-total num">' + fmt(a.total) + "</div></div>" +
+          '<div class="gain up">' + esc(a.gain) + "</div>" +
+          '<div class="stackbar">' + stack + '</div><div class="legend">' + legend + "</div>" +
+          '<table><thead><tr><th>Top holdings</th><th class="num">% of acct</th><th class="num">Value</th></tr></thead><tbody>' + rows + "</tbody></table></div>";
+      }).join("");
+      document.getElementById("portfolioCallouts").innerHTML = (d.portfolioCallouts || []).map(renderCallout).join("");
+
+      document.getElementById("spendingNote").textContent = d.spendingNote || "";
+      document.getElementById("spendingBars").innerHTML = d.spendingBars.map(function(b){
+        return '<div class="bar-row"><span class="cat">' + esc(b.cat) + '</span><div class="bar-track"><div class="bar-fill" style="width:' +
+          b.widthPct + "%;background:var(--" + b.color + ')"></div></div><span class="amt">' + fmt(b.amt) + ' <span class="pct">' + b.pct + "%</span></span></div>";
+      }).join("");
+      document.getElementById("spendingCallout").innerHTML = d.spendingCallout ? renderCallout({type:"info", html:d.spendingCallout}) : "";
+      document.getElementById("leaksRow").innerHTML = d.leaks.map(function(l){
+        return '<div class="leak-card"><div class="rank">' + esc(l.rank) + '</div><div class="amt num">' + fmt(l.amt) + '</div><div class="note">' + esc(l.note) + "</div></div>";
+      }).join("");
+
+      function kvRows(kv){ return kv.map(function(p){ return '<div class="kv"><span class="k">' + esc(p[0]) + '</span><span class="v">' + esc(p[1]) + "</span></div>"; }).join(""); }
+      var mbna = d.liabilities.mbna, mb = d.liabilities.missingBox;
+      document.getElementById("liabGrid").innerHTML =
+        '<div class="panel"><div class="panel-head"><h3>MBNA Mastercard</h3><div class="acct-total num">' + fmt(mbna.total) + "</div></div>" +
+        '<div class="util-track"><div class="util-fill" style="width:' + mbna.utilPct + '%; background:var(--warn)"></div></div>' +
+        '<div style="font-size:12.5px;color:var(--ink-2);margin-bottom:14px;">' + esc(mbna.utilNote) + "</div>" + kvRows(mbna.kv) + "</div>" +
+        '<div class="missing-box"><div class="t">' + esc(mb.title) + '</div><div class="d">' + esc(mb.body) + "</div></div>";
+
+      document.getElementById("adviceList").innerHTML = d.advice.map(function(a, i){
+        return '<div class="advice-item"><div class="n">' + (i + 1) + "</div><div><h4>" + esc(a.title) + "</h4><p>" + esc(a.body) + "</p></div></div>";
+      }).join("");
+
+      document.getElementById("footerSources").textContent = d.footerSources || "";
+    }).catch(function(){
+      document.getElementById("footerSources").textContent = "Couldn't load snapshot content.";
+    });
+  });
+})();
+</script>
+</body>
+</html>
