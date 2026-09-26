@@ -6,12 +6,12 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Wealth Ledger — July 2026</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="style.css">
 <script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore-compat.js"></script>
-<script src="assets/firebase-config.js"></script>
-<script src="assets/auth.js"></script>
+<script src="firebase-config.js"></script>
+<script src="auth.js"></script>
 </head>
 <body>
 
@@ -110,7 +110,7 @@
       document.getElementById("heroSub").textContent = d.hero.sub;
 
       document.getElementById("chipsRow").innerHTML = d.chips.map(function(c){
-        return '<span class="chip ' + c[0] + '"><span class="dot"></span>' + esc(c[1]) + "</span>";
+        return '<span class="chip ' + c.status + '"><span class="dot"></span>' + esc(c.label) + "</span>";
       }).join("");
 
       document.getElementById("kpiRow").innerHTML = d.kpis.map(function(k){
@@ -144,7 +144,7 @@
         return '<div class="leak-card"><div class="rank">' + esc(l.rank) + '</div><div class="amt num">' + fmt(l.amt) + '</div><div class="note">' + esc(l.note) + "</div></div>";
       }).join("");
 
-      function kvRows(kv){ return kv.map(function(p){ return '<div class="kv"><span class="k">' + esc(p[0]) + '</span><span class="v">' + esc(p[1]) + "</span></div>"; }).join(""); }
+      function kvRows(kv){ return kv.map(function(p){ return '<div class="kv"><span class="k">' + esc(p.k) + '</span><span class="v">' + esc(p.v) + "</span></div>"; }).join(""); }
       var mbna = d.liabilities.mbna, mb = d.liabilities.missingBox;
       document.getElementById("liabGrid").innerHTML =
         '<div class="panel"><div class="panel-head"><h3>MBNA Mastercard</h3><div class="acct-total num">' + fmt(mbna.total) + "</div></div>" +
